@@ -1,19 +1,31 @@
 import type { AudioManager } from '../game/audio/AudioManager';
 import type { GameSession } from '../game/simulation/GameSession';
 import type { GamePhase, GameSnapshot, ToolId, UpgradeId, Verdict } from '../game/simulation/types';
+import {
+  caseTranslation,
+  customerTranslation,
+  message,
+  oppositeLocale,
+  shiftTranslation,
+  toolName,
+  upgradeTranslation,
+  verdictName,
+  type SupportedLocale,
+  type UiMessageKey,
+} from '../i18n/i18n';
 import type { PlatformAdapter } from '../platform/types';
 import type { SaveData, SaveStore } from '../storage/SaveStore';
 
-const TOOL_LABELS: Record<ToolId, { icon: string; name: string; key: string }> = {
-  xray: { icon: '▧', name: 'X-RAY', key: '1' },
-  resonance: { icon: '◉', name: 'LISTEN', key: '2' },
-  aura: { icon: '◌', name: 'AURA', key: '3' },
+const TOOL_META: Record<ToolId, { icon: string; key: string }> = {
+  xray: { icon: '▧', key: '1' },
+  resonance: { icon: '◉', key: '2' },
+  aura: { icon: '◌', key: '3' },
 };
 
-const VERDICT_LABELS: Record<Verdict, { icon: string; name: string; key: string }> = {
-  accept: { icon: '✓', name: 'ACCEPT', key: 'A' },
-  return: { icon: '↩', name: 'RETURN', key: 'R' },
-  quarantine: { icon: '!', name: 'QUARANTINE', key: 'Q' },
+const VERDICT_META: Record<Verdict, { icon: string; key: string }> = {
+  accept: { icon: '✓', key: 'A' },
+  return: { icon: '↩', key: 'R' },
+  quarantine: { icon: '!', key: 'Q' },
 };
 
 export class GameUI {
@@ -29,6 +41,7 @@ export class GameUI {
   private rewardUsed = false;
   private resultRecorded = false;
   private lastSavedScore = -1;
+  private locale: SupportedLocale;
 
   constructor(
     root: HTMLElement,
@@ -43,62 +56,66 @@ export class GameUI {
     this.platform = platform;
     this.saveStore = saveStore;
     this.save = saveStore.load();
+    this.locale = this.save.language;
     this.snapshot = session.snapshot();
     this.audio.setMuted(this.save.muted);
+    this.applyDocumentLanguage();
     this.mount();
     this.bind();
     this.session.subscribe((snapshot) => this.render(snapshot));
   }
 
   private mount(): void {
+    this.root.dataset.locale = this.locale;
     this.root.innerHTML = `
       <div class="vignette" aria-hidden="true"></div>
-      <header class="hud" aria-label="Shift status">
-        <div class="hud-block shift-chip"><span class="eyebrow">NIGHT</span><strong id="hud-night">1</strong></div>
+      <header class="hud" aria-label="${this.m('shiftStatus')}">
+        <div class="hud-block shift-chip"><span class="eyebrow">${this.m('night')}</span><strong id="hud-night">1</strong></div>
         <div class="hud-block timer-chip" id="timer-chip"><span class="timer-icon">◷</span><strong id="hud-time">01:20</strong></div>
-        <div class="hud-block score-chip"><span class="eyebrow">SCORE</span><strong id="hud-score">0</strong></div>
-        <div class="hud-block combo-chip"><span class="eyebrow">STREAK</span><strong id="hud-combo">×0</strong></div>
-        <div class="hud-block hearts-chip" id="hud-hearts" aria-label="Mistakes remaining"></div>
-        <button class="icon-button sound-button" id="sound-button" aria-label="Toggle sound">♪</button>
+        <div class="hud-block score-chip"><span class="eyebrow">${this.m('score')}</span><strong id="hud-score">0</strong></div>
+        <div class="hud-block combo-chip"><span class="eyebrow">${this.m('streak')}</span><strong id="hud-combo">×0</strong></div>
+        <div class="hud-block hearts-chip" id="hud-hearts" aria-label="${this.m('mistakesRemaining')}"></div>
+        <button class="icon-button language-button" id="language-button" aria-label="${this.m('language')}">${this.m('languageSwitch')}</button>
+        <button class="icon-button sound-button" id="sound-button" aria-label="${this.m('toggleSound')}">♪</button>
       </header>
 
       <aside class="rules-board play-panel" id="rules-board">
         <div class="pin"></div>
-        <p class="eyebrow">TONIGHT'S DIRECTIVE</p>
-        <h2 id="rules-title">First Bell</h2>
+        <p class="eyebrow">${this.m('tonightDirective')}</p>
+        <h2 id="rules-title"></h2>
         <ol id="rules-list"></ol>
-        <div class="quota-line"><span>QUOTA</span><strong id="quota-value">0 / 6</strong></div>
+        <div class="quota-line"><span>${this.m('quota')}</span><strong id="quota-value">0 / 6</strong></div>
       </aside>
 
       <section class="customer-card play-panel" id="customer-card">
-        <p class="eyebrow" id="customer-species">MOON MOTH</p>
+        <p class="eyebrow" id="customer-species"></p>
         <h2 id="customer-name">Mira</h2>
-        <p id="customer-greeting">Handle it gently.</p>
+        <p id="customer-greeting"></p>
       </section>
 
       <section class="docket play-panel" id="docket">
-        <div class="docket-top"><span>PARCEL DOCKET</span><strong id="tracking-code">MM-01-0000</strong></div>
-        <h2 id="parcel-name">Moonpetal Tea</h2>
+        <div class="docket-top"><span>${this.m('parcelDocket')}</span><strong id="tracking-code">MM-01-0000</strong></div>
+        <h2 id="parcel-name"></h2>
         <ul id="visible-hints"></ul>
         <div class="scan-results" id="scan-results"></div>
       </section>
 
-      <section class="tool-rack play-panel" aria-label="Inspection tools">
-        <p class="eyebrow">INSPECTION</p>
+      <section class="tool-rack play-panel" aria-label="${this.m('inspection')}">
+        <p class="eyebrow">${this.m('inspection')}</p>
         <div class="tool-buttons" id="tool-buttons">
-          ${Object.entries(TOOL_LABELS).map(([id, item]) => `
-            <button class="tool-button" data-tool="${id}">
-              <span class="keycap">${item.key}</span><span class="tool-icon">${item.icon}</span><span>${item.name}</span>
+          ${Object.entries(TOOL_META).map(([id, item]) => `
+            <button class="tool-button" data-tool="${id}" data-used-label="${this.m('scanned')}">
+              <span class="keycap">${item.key}</span><span class="tool-icon">${item.icon}</span><span>${toolName(this.locale, id as ToolId)}</span>
             </button>`).join('')}
         </div>
       </section>
 
-      <section class="stamp-rack play-panel" aria-label="Decision stamps">
-        <p class="eyebrow">FINAL STAMP</p>
+      <section class="stamp-rack play-panel" aria-label="${this.m('finalStamp')}">
+        <p class="eyebrow">${this.m('finalStamp')}</p>
         <div class="stamp-buttons" id="stamp-buttons">
-          ${Object.entries(VERDICT_LABELS).map(([id, item]) => `
+          ${Object.entries(VERDICT_META).map(([id, item]) => `
             <button class="stamp-button ${id}" data-verdict="${id}">
-              <span class="keycap">${item.key}</span><span class="stamp-icon">${item.icon}</span><span>${item.name}</span>
+              <span class="keycap">${item.key}</span><span class="stamp-icon">${item.icon}</span><span>${verdictName(this.locale, id as Verdict)}</span>
             </button>`).join('')}
         </div>
       </section>
@@ -110,8 +127,6 @@ export class GameUI {
       <div class="modal-layer" id="modal-layer">
         <section class="modal-card" id="modal-card" role="dialog" aria-modal="true"></section>
       </div>
-
-      <div class="rotate-notice"><span>↻</span><strong>Rotate for the night shift</strong></div>
     `;
   }
 
@@ -147,6 +162,12 @@ export class GameUI {
         this.session.returnToMenu();
       } else if (target.id === 'revive-button') {
         void this.tryRevive();
+      } else if (target.id === 'language-button' || target.id === 'modal-language-button') {
+        this.locale = oppositeLocale(this.locale);
+        this.save = this.saveStore.setLanguage(this.locale);
+        this.applyDocumentLanguage();
+        this.mount();
+        this.render(this.snapshot);
       } else if (target.id === 'sound-button') {
         this.save = this.saveStore.setMuted(!this.audio.isMuted());
         this.audio.setMuted(this.save.muted);
@@ -172,11 +193,13 @@ export class GameUI {
   private render(snapshot: GameSnapshot): void {
     this.snapshot = snapshot;
     this.root.dataset.phase = snapshot.phase;
+    this.root.dataset.locale = this.locale;
+    const localizedShift = shiftTranslation(this.locale, snapshot.shift.id);
     this.setText('hud-night', String(snapshot.shift.id));
     this.setText('hud-time', this.formatTime(snapshot.timeRemainingMs));
-    this.setText('hud-score', snapshot.score.toLocaleString('en-US'));
+    this.setText('hud-score', snapshot.score.toLocaleString(this.locale));
     this.setText('hud-combo', `×${snapshot.combo}`);
-    this.setText('rules-title', snapshot.shift.title);
+    this.setText('rules-title', localizedShift?.title ?? snapshot.shift.title);
     this.setText('quota-value', `${snapshot.processed} / ${snapshot.shift.quota}`);
     this.renderHearts(snapshot);
     this.renderRules(snapshot);
@@ -212,23 +235,27 @@ export class GameUI {
 
   private renderRules(snapshot: GameSnapshot): void {
     const list = this.root.querySelector('#rules-list');
-    if (list) list.innerHTML = snapshot.shift.rules.map((rule) => `<li>${rule}</li>`).join('');
+    const rules = shiftTranslation(this.locale, snapshot.shift.id)?.rules ?? snapshot.shift.rules;
+    if (list) list.innerHTML = rules.map((rule) => `<li>${rule}</li>`).join('');
   }
 
   private renderCase(snapshot: GameSnapshot): void {
     const activeCase = snapshot.currentCase;
     if (!activeCase) return;
-    this.setText('customer-species', activeCase.customer.species.toUpperCase());
+    const localizedCase = caseTranslation(this.locale, activeCase.id);
+    const localizedCustomer = customerTranslation(this.locale, activeCase.customer.id);
+    this.setText('customer-species', (localizedCustomer?.species ?? activeCase.customer.species).toUpperCase());
     this.setText('customer-name', activeCase.customer.name);
-    this.setText('customer-greeting', `“${activeCase.customer.greeting}”`);
+    this.setText('customer-greeting', `“${localizedCustomer?.greeting ?? activeCase.customer.greeting}”`);
     this.setText('tracking-code', activeCase.trackingCode);
-    this.setText('parcel-name', activeCase.parcelName);
+    this.setText('parcel-name', localizedCase?.parcelName ?? activeCase.parcelName);
     const hints = this.root.querySelector('#visible-hints');
-    if (hints) hints.innerHTML = activeCase.visibleHints.map((hint) => `<li><span>◆</span>${hint}</li>`).join('');
+    const visibleHints = localizedCase?.visibleHints ?? activeCase.visibleHints;
+    if (hints) hints.innerHTML = visibleHints.map((hint) => `<li><span>◆</span>${hint}</li>`).join('');
     const results = this.root.querySelector('#scan-results');
     if (results) {
       results.innerHTML = Object.entries(snapshot.revealedClues).map(([tool, clue]) => `
-        <div class="scan-line"><strong>${TOOL_LABELS[tool as ToolId].name}</strong><span>${clue}</span></div>`).join('');
+        <div class="scan-line"><strong>${toolName(this.locale, tool as ToolId)}</strong><span>${localizedCase?.clues[tool as ToolId] ?? clue}</span></div>`).join('');
     }
   }
 
@@ -253,8 +280,14 @@ export class GameUI {
     toast?.classList.toggle('correct', Boolean(visible && result.correct));
     toast?.classList.toggle('wrong', Boolean(visible && !result.correct));
     if (!visible || !result) return;
-    this.setText('result-title', result.correct ? `CLEARED  +${result.points}` : `INCORRECT — ${result.expected.toUpperCase()}`);
-    this.setText('result-copy', `${result.explanation} ${result.incident}`);
+    const localizedCase = snapshot.currentCase ? caseTranslation(this.locale, snapshot.currentCase.id) : undefined;
+    this.setText(
+      'result-title',
+      result.correct
+        ? `${this.m('cleared')}  +${result.points}`
+        : `${this.m('incorrect')} — ${verdictName(this.locale, result.expected)}`,
+    );
+    this.setText('result-copy', `${localizedCase?.explanation ?? result.explanation} ${localizedCase?.incident ?? result.incident}`);
   }
 
   private renderModal(snapshot: GameSnapshot): void {
@@ -267,50 +300,62 @@ export class GameUI {
     layer.setAttribute('aria-hidden', String(!visible));
     if (!visible) return;
 
+    const localizedShift = shiftTranslation(this.locale, snapshot.shift.id);
+    const shiftTitle = localizedShift?.title ?? snapshot.shift.title;
+    const shiftSubtitle = localizedShift?.subtitle ?? snapshot.shift.subtitle;
+    const shiftRules = localizedShift?.rules ?? snapshot.shift.rules;
+    const formattedScore = snapshot.score.toLocaleString(this.locale);
+    const languageControl = `<button class="modal-language-button" id="modal-language-button" aria-label="${this.m('language')}">${this.m('languageSwitch')}</button>`;
+
     if (snapshot.phase === 'menu') {
       card.innerHTML = `
-        <div class="title-mark">M</div>
-        <p class="eyebrow">NOCTURNAL POSTAL SERVICE</p>
-        <h1>MONSTER MAIL</h1><h2 class="night-title">NIGHT SHIFT</h2>
-        <p class="modal-lead">Inspect suspicious parcels. Stamp the truth. Keep the city sleeping.</p>
-        <div class="record-row"><span>BEST SCORE <strong>${this.save.bestScore.toLocaleString('en-US')}</strong></span><span>BEST NIGHT <strong>${this.save.bestNight}</strong></span></div>
-        <button class="primary-button" id="start-button">CLOCK IN <span>→</span></button>
-        <p class="microcopy">Mouse / touch · Keyboard shortcuts supported</p>`;
+        ${languageControl}
+        <div class="title-mark">${this.locale === 'zh-CN' ? '邮' : 'M'}</div>
+        <p class="eyebrow">${this.m('service')}</p>
+        <h1>${this.m('brand')}</h1><h2 class="night-title">${this.m('nightShift')}</h2>
+        <p class="modal-lead">${this.m('menuLead')}</p>
+        <div class="record-row"><span>${this.m('bestScore')} <strong>${this.save.bestScore.toLocaleString(this.locale)}</strong></span><span>${this.m('bestNight')} <strong>${this.save.bestNight}</strong></span></div>
+        <button class="primary-button" id="start-button">${this.m('clockIn')} <span>→</span></button>
+        <p class="microcopy">${this.m('controls')}</p>`;
     } else if (snapshot.phase === 'briefing') {
       card.innerHTML = `
-        <p class="eyebrow">NIGHT ${snapshot.shift.id} OF 5</p>
-        <h1>${snapshot.shift.title}</h1>
-        <p class="modal-lead">${snapshot.shift.subtitle}</p>
-        <div class="brief-grid"><span><strong>${snapshot.shift.quota}</strong> parcels</span><span><strong>${snapshot.shift.timeSeconds}</strong> seconds</span><span><strong>${snapshot.hearts}</strong> mistakes left</span></div>
-        <div class="brief-rules">${snapshot.shift.rules.map((rule) => `<p><span>◆</span>${rule}</p>`).join('')}</div>
-        <button class="primary-button" id="begin-shift-button">RING THE BELL <span>↗</span></button>`;
+        ${languageControl}
+        <p class="eyebrow">${this.m('nightOf', { night: snapshot.shift.id, total: 5 })}</p>
+        <h1>${shiftTitle}</h1>
+        <p class="modal-lead">${shiftSubtitle}</p>
+        <div class="brief-grid"><span><strong>${snapshot.shift.quota}</strong>${this.m('parcels')}</span><span><strong>${snapshot.shift.timeSeconds}</strong>${this.m('seconds')}</span><span><strong>${snapshot.hearts}</strong>${this.m('mistakesLeft')}</span></div>
+        <div class="brief-rules">${shiftRules.map((rule) => `<p><span>◆</span>${rule}</p>`).join('')}</div>
+        <button class="primary-button" id="begin-shift-button">${this.m('ringBell')} <span>↗</span></button>`;
     } else if (snapshot.phase === 'shift-complete') {
       card.innerHTML = `
-        <p class="eyebrow">SHIFT CLEARED</p>
-        <h1>${snapshot.correct} / ${snapshot.shift.quota} CORRECT</h1>
-        <p class="modal-lead">Choose one union benefit before the next bell.</p>
+        ${languageControl}
+        <p class="eyebrow">${this.m('shiftCleared')}</p>
+        <h1>${this.m('correctCount', { correct: snapshot.correct, total: snapshot.shift.quota })}</h1>
+        <p class="modal-lead">${this.m('chooseBenefit')}</p>
         <div class="upgrade-grid">${snapshot.upgrades.map((upgrade) => `
           <button class="upgrade-card" data-upgrade="${upgrade.id}" ${this.busy ? 'disabled' : ''}>
-            <span class="upgrade-icon">${upgrade.icon}</span><strong>${upgrade.title}</strong><small>${upgrade.description}</small>
+            <span class="upgrade-icon">${upgrade.icon}</span><strong>${upgradeTranslation(this.locale, upgrade.id)?.title ?? upgrade.title}</strong><small>${upgradeTranslation(this.locale, upgrade.id)?.description ?? upgrade.description}</small>
           </button>`).join('')}</div>
-        <div class="summary-line"><span>SCORE <strong>${snapshot.score.toLocaleString('en-US')}</strong></span><span>COINS <strong>${snapshot.coins}</strong></span><span>BEST STREAK <strong>×${snapshot.bestCombo}</strong></span></div>`;
+        <div class="summary-line"><span>${this.m('score')} <strong>${formattedScore}</strong></span><span>${this.m('coins')} <strong>${snapshot.coins}</strong></span><span>${this.m('bestStreak')} <strong>×${snapshot.bestCombo}</strong></span></div>`;
     } else if (snapshot.phase === 'game-over') {
       card.innerHTML = `
-        <p class="eyebrow">SHIFT TERMINATED</p>
-        <h1>THE MAIL WON.</h1>
-        <p class="modal-lead">Night ${snapshot.shift.id} · Score ${snapshot.score.toLocaleString('en-US')}</p>
+        ${languageControl}
+        <p class="eyebrow">${this.m('shiftTerminated')}</p>
+        <h1>${this.m('mailWon')}</h1>
+        <p class="modal-lead">${this.m('nightScore', { night: snapshot.shift.id, score: formattedScore })}</p>
         <div class="modal-actions">
-          ${this.rewardUsed ? '' : '<button class="secondary-button reward" id="revive-button">▶ REVIVE WITH AD</button>'}
-          <button class="primary-button" id="retry-button">START NEW RUN</button>
-          <button class="text-button" id="menu-button">Main menu</button>
+          ${this.rewardUsed ? '' : `<button class="secondary-button reward" id="revive-button">${this.m('reviveWithAd')}</button>`}
+          <button class="primary-button" id="retry-button">${this.m('startNewRun')}</button>
+          <button class="text-button" id="menu-button">${this.m('mainMenu')}</button>
         </div>`;
     } else {
       card.innerHTML = `
-        <p class="eyebrow">DAWN DELIVERY COMPLETE</p>
-        <h1>CITY SECURED.</h1>
-        <p class="modal-lead">You survived all five bells with a score of ${snapshot.score.toLocaleString('en-US')}.</p>
-        <div class="victory-seal">★<span>MASTER<br>INSPECTOR</span>★</div>
-        <div class="modal-actions"><button class="primary-button" id="retry-button">WORK ANOTHER NIGHT</button><button class="text-button" id="menu-button">Main menu</button></div>`;
+        ${languageControl}
+        <p class="eyebrow">${this.m('dawnComplete')}</p>
+        <h1>${this.m('citySecured')}</h1>
+        <p class="modal-lead">${this.m('victoryLead', { score: formattedScore })}</p>
+        <div class="victory-seal">★<span>${this.m('masterInspector').replace('\n', '<br>')}</span>★</div>
+        <div class="modal-actions"><button class="primary-button" id="retry-button">${this.m('workAnotherNight')}</button><button class="text-button" id="menu-button">${this.m('mainMenu')}</button></div>`;
     }
   }
 
@@ -349,8 +394,17 @@ export class GameUI {
     const button = this.root.querySelector('#sound-button');
     if (button) {
       button.textContent = this.audio.isMuted() ? '×' : '♪';
-      button.setAttribute('aria-label', this.audio.isMuted() ? 'Enable sound' : 'Mute sound');
+      button.setAttribute('aria-label', this.audio.isMuted() ? this.m('enableSound') : this.m('muteSound'));
     }
+  }
+
+  private m(key: UiMessageKey, variables: Record<string, string | number> = {}): string {
+    return message(this.locale, key, variables);
+  }
+
+  private applyDocumentLanguage(): void {
+    document.documentElement.lang = this.locale;
+    document.title = this.locale === 'zh-CN' ? '怪物邮件：夜班' : 'Monster Mail: Night Shift';
   }
 
   private setText(id: string, value: string): void {

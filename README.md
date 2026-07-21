@@ -19,6 +19,8 @@ Keyboard controls:
 - `A`, `R`, `Q`: Accept, Return, Quarantine
 - Mouse and touch are fully supported.
 
+The interface automatically follows the browser language and currently includes complete English and Simplified Chinese content. Use the `EN` / `中文` button to switch manually. Both landscape and portrait phone layouts are playable.
+
 ## Quality checks
 
 ```bash

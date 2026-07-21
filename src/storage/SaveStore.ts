@@ -1,9 +1,12 @@
+import { detectLocale, isSupportedLocale, type SupportedLocale } from '../i18n/i18n';
+
 export interface SaveData {
   version: 1;
   bestScore: number;
   bestNight: number;
   gamesPlayed: number;
   muted: boolean;
+  language: SupportedLocale;
 }
 
 const SAVE_KEY = 'monster_mail_save_v1';
@@ -14,6 +17,7 @@ const DEFAULT_SAVE: SaveData = {
   bestNight: 0,
   gamesPlayed: 0,
   muted: false,
+  language: detectLocale(),
 };
 
 export class SaveStore {
@@ -22,11 +26,13 @@ export class SaveStore {
       const value = localStorage.getItem(SAVE_KEY);
       if (!value) return { ...DEFAULT_SAVE };
       const parsed = JSON.parse(value) as Partial<SaveData>;
-      return {
+      const merged: SaveData = {
         ...DEFAULT_SAVE,
         ...parsed,
         version: 1,
       };
+      merged.language = isSupportedLocale(parsed.language) ? parsed.language : detectLocale();
+      return merged;
     } catch {
       return { ...DEFAULT_SAVE };
     }
@@ -54,6 +60,12 @@ export class SaveStore {
 
   setMuted(muted: boolean): SaveData {
     const updated = { ...this.load(), muted };
+    this.save(updated);
+    return updated;
+  }
+
+  setLanguage(language: SupportedLocale): SaveData {
+    const updated = { ...this.load(), language };
     this.save(updated);
     return updated;
   }
