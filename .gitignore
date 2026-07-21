@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-poki/
+dist-crazygames/
+.vite/
+coverage/
+*.log
+.DS_Store
+.idea/
+.vscode/

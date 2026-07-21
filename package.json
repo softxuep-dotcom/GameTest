@@ -1,0 +1,23 @@
+{
+  "name": "monster-mail-night-shift",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "vite build",
+    "build:poki": "vite build --mode poki --outDir dist-poki",
+    "build:crazygames": "vite build --mode crazygames --outDir dist-crazygames",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "phaser": "3.90.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vite": "^7.3.6",
+    "vitest": "^4.1.10"
+  }
+}
