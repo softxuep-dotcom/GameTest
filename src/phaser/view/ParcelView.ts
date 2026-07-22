@@ -4,9 +4,12 @@ import { parcelFrameForEmblem, xrayFrameForCase } from './assetFrames';
 
 export class ParcelView extends Phaser.GameObjects.Container {
   private parcelArt!: Phaser.GameObjects.Sprite;
+  private parcelFrame = 0;
   private trackingTag!: Phaser.GameObjects.Container;
   private xrayLayer: Phaser.GameObjects.Container | null = null;
-  private xrayMaskSource: Phaser.GameObjects.Graphics | null = null;
+  private xrayMaskedLayer: Phaser.GameObjects.Container | null = null;
+  private xrayMaskSource: Phaser.GameObjects.Image | null = null;
+  private xrayTweenTargets: Phaser.GameObjects.GameObject[] = [];
 
   constructor(scene: Phaser.Scene, x: number, y: number, style: ParcelStyle, trackingCode: string) {
     super(scene, x, y);
@@ -20,76 +23,89 @@ export class ParcelView extends Phaser.GameObjects.Container {
   showXray(caseId: string): void {
     if (this.xrayLayer) return;
 
-    this.parcelArt.setAlpha(0.25).setTint(0x73bfd0);
-    this.trackingTag.setAlpha(0.28);
-
-    const layer = this.scene.add.container(0, 0).setAlpha(0);
-    const plate = this.scene.add.graphics();
-    plate.fillStyle(0x031624, 0.92);
-    plate.fillRoundedRect(-132, -82, 264, 170, 26);
-    plate.fillStyle(0x20d9f0, 0.08);
-    plate.fillRoundedRect(-124, -75, 248, 156, 21);
-    layer.add(plate);
-
     const evidenceFrame = xrayFrameForCase(caseId);
     if (evidenceFrame === null) {
-      layer.add(this.createGenericEvidence(caseId));
-    } else {
-      const evidence = this.scene.add
-        .sprite(0, 2, 'xray-evidence-v1', evidenceFrame)
-        .setDisplaySize(184, 184)
-        .setBlendMode(Phaser.BlendModes.ADD);
-      layer.add(evidence);
-      this.scene.tweens.add({
-        targets: evidence,
-        scaleX: evidence.scaleX * 1.035,
-        scaleY: evidence.scaleY * 1.035,
-        alpha: 0.8,
-        duration: 920,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.InOut',
-      });
+      throw new Error(`Missing authored X-ray evidence for case: ${caseId}`);
     }
 
-    const scanGlow = this.scene.add.rectangle(0, -68, 248, 28, 0x4feaff, 0.13);
-    const scanLine = this.scene.add.rectangle(0, -68, 248, 4, 0xb8f8ff, 0.9);
-    layer.add([scanGlow, scanLine]);
+    this.parcelArt.setAlpha(0.16).setTint(0x73bfd0);
+    this.trackingTag.setAlpha(0.16);
 
-    const maskSource = this.scene.make.graphics({ x: this.x, y: this.y });
-    maskSource.fillStyle(0xffffff, 1);
-    maskSource.fillRoundedRect(-132, -82, 264, 170, 26);
-    layer.setMask(maskSource.createGeometryMask());
+    const layer = this.scene.add.container(0, 0).setAlpha(0);
+    const outline = this.scene.add.container(0, 0);
+    const outlineOffsets: Array<readonly [number, number]> = [
+      [-4, 0], [4, 0], [0, -4], [0, 4],
+      [-3, -3], [3, -3], [-3, 3], [3, 3],
+    ];
+    for (const [offsetX, offsetY] of outlineOffsets) {
+      outline.add(
+        this.scene.add
+          .sprite(offsetX, offsetY, 'parcel-atlas-v1', this.parcelFrame)
+          .setDisplaySize(340, 340)
+          .setTintFill(0x57eaff)
+          .setAlpha(0.16),
+      );
+    }
 
-    const frame = this.scene.add.graphics();
-    frame.lineStyle(4, 0x5cecff, 0.9);
-    frame.strokeRoundedRect(-132, -82, 264, 170, 26);
-    frame.lineStyle(1, 0xd4fbff, 0.65);
-    frame.strokeRoundedRect(-124, -74, 248, 154, 21);
-    frame.lineStyle(3, 0xffcf70, 0.75);
-    frame.lineBetween(-119, -88, -82, -88);
-    frame.lineBetween(82, 94, 119, 94);
+    const maskedLayer = this.scene.add.container(0, 0);
+    const shell = this.scene.add
+      .sprite(0, 0, 'parcel-atlas-v1', this.parcelFrame)
+      .setDisplaySize(340, 340)
+      .setTintFill(0x031621)
+      .setAlpha(0.94);
+    const innerGlow = this.scene.add
+      .sprite(0, 0, 'parcel-atlas-v1', this.parcelFrame)
+      .setDisplaySize(330, 330)
+      .setTintFill(0x0b7284)
+      .setAlpha(0.16);
+    const evidence = this.scene.add
+      .sprite(0, 0, evidenceFrame.texture, evidenceFrame.frame)
+      .setDisplaySize(208, 208)
+      .setAlpha(0.96);
+    const scanGlow = this.scene.add.rectangle(0, -116, 310, 34, 0x4feaff, 0.14);
+    const scanLine = this.scene.add.rectangle(0, -116, 310, 4, 0xc9fbff, 0.92);
+    maskedLayer.add([shell, innerGlow, evidence, scanGlow, scanLine]);
+    layer.add([outline, maskedLayer]);
 
-    this.add([layer, frame]);
+    const maskSource = new Phaser.GameObjects.Image(
+      this.scene,
+      this.x,
+      this.y,
+      'parcel-atlas-v1',
+      this.parcelFrame,
+    ).setDisplaySize(340, 340);
+    maskedLayer.setMask(maskSource.createBitmapMask());
+
+    this.add(layer);
     this.xrayLayer = layer;
+    this.xrayMaskedLayer = maskedLayer;
     this.xrayMaskSource = maskSource;
+    this.xrayTweenTargets = [layer, evidence, scanGlow, scanLine, outline];
 
     this.scene.tweens.add({ targets: layer, alpha: 1, duration: 230, ease: 'Quad.Out' });
     this.scene.tweens.add({
+      targets: evidence,
+      scaleX: evidence.scaleX * 1.035,
+      scaleY: evidence.scaleY * 1.035,
+      alpha: 0.82,
+      duration: 920,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.InOut',
+    });
+    this.scene.tweens.add({
       targets: [scanGlow, scanLine],
-      y: 72,
+      y: 116,
       duration: 1350,
       repeat: -1,
       ease: 'Sine.InOut',
     });
-    this.scene.tweens.add({ targets: frame, alpha: 0.56, duration: 720, yoyo: true, repeat: -1 });
+    this.scene.tweens.add({ targets: outline, alpha: 0.48, duration: 720, yoyo: true, repeat: -1 });
   }
 
   resolve(correct: boolean): void {
     this.scene.tweens.killTweensOf(this);
-    this.xrayLayer?.clearMask(true);
-    this.xrayMaskSource?.destroy();
-    this.xrayMaskSource = null;
+    this.cleanupXrayRuntime();
     this.scene.tweens.add({
       targets: this,
       x: correct ? this.x + 420 : this.x - 420,
@@ -102,9 +118,7 @@ export class ParcelView extends Phaser.GameObjects.Container {
   }
 
   destroy(fromScene?: boolean): void {
-    this.xrayLayer?.clearMask(true);
-    this.xrayMaskSource?.destroy();
-    this.xrayMaskSource = null;
+    this.cleanupXrayRuntime();
     super.destroy(fromScene);
   }
 
@@ -113,8 +127,9 @@ export class ParcelView extends Phaser.GameObjects.Container {
     shadow.fillStyle(0x080510, 0.5);
     shadow.fillEllipse(0, 104, 294, 34);
 
+    this.parcelFrame = parcelFrameForEmblem(style.emblem);
     this.parcelArt = this.scene.add
-      .sprite(0, 0, 'parcel-atlas-v1', parcelFrameForEmblem(style.emblem))
+      .sprite(0, 0, 'parcel-atlas-v1', this.parcelFrame)
       .setDisplaySize(340, 340);
 
     const tagBack = this.scene.add.graphics();
@@ -147,36 +162,15 @@ export class ParcelView extends Phaser.GameObjects.Container {
     }
   }
 
-  private createGenericEvidence(caseId: string): Phaser.GameObjects.Graphics {
-    const seed = [...caseId].reduce((sum, character) => sum + character.charCodeAt(0), 0);
-    const mode = seed % 3;
-    const evidence = this.scene.add.graphics();
-    evidence.setBlendMode(Phaser.BlendModes.ADD);
-    evidence.lineStyle(4, 0x96f5ff, 0.9);
-    evidence.fillStyle(0x35cfe8, 0.16);
-
-    if (mode === 0) {
-      evidence.fillRoundedRect(-62, -38, 124, 76, 20);
-      evidence.strokeRoundedRect(-62, -38, 124, 76, 20);
-      evidence.strokeCircle(-29, 0, 17);
-      evidence.strokeCircle(27, 0, 22);
-    } else if (mode === 1) {
-      evidence.fillEllipse(0, 5, 132, 78);
-      evidence.strokeEllipse(0, 5, 132, 78);
-      evidence.lineBetween(-48, -22, 42, 27);
-      evidence.lineBetween(-45, 25, 48, -18);
-      evidence.strokeCircle(0, 2, 18);
-    } else {
-      evidence.fillRoundedRect(-74, -29, 148, 58, 29);
-      evidence.strokeRoundedRect(-74, -29, 148, 58, 29);
-      evidence.lineBetween(-42, -29, -42, 29);
-      evidence.lineBetween(39, -29, 39, 29);
-      evidence.strokeCircle(0, 0, 13);
+  private cleanupXrayRuntime(): void {
+    if (this.xrayTweenTargets.length > 0) {
+      this.scene.tweens.killTweensOf(this.xrayTweenTargets);
+      this.xrayTweenTargets = [];
     }
-
-    evidence.lineStyle(1, 0xd5fcff, 0.55);
-    evidence.strokeCircle(-82, -49, 5);
-    evidence.strokeCircle(89, 43, 7);
-    return evidence;
+    this.xrayMaskedLayer?.clearMask(true);
+    this.xrayMaskedLayer = null;
+    this.xrayMaskSource?.destroy();
+    this.xrayMaskSource = null;
   }
+
 }

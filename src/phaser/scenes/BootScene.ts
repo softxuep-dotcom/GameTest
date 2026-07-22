@@ -23,6 +23,12 @@ export class BootScene extends Phaser.Scene {
       frameWidth: 627,
       frameHeight: 627,
     });
+    for (let version = 2; version <= 5; version += 1) {
+      this.load.spritesheet(`xray-evidence-v${version}`, `assets/fx/xray-evidence-v${version}.png`, {
+        frameWidth: 627,
+        frameHeight: 627,
+      });
+    }
   }
 
   create(): void {

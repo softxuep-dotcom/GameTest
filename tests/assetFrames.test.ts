@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CASE_TEMPLATES } from '../src/game/content/cases';
 import { monsterFrameForCustomer, parcelFrameForEmblem, xrayFrameForCase } from '../src/phaser/view/assetFrames';
 
 describe('generated art frame mappings', () => {
@@ -17,11 +18,16 @@ describe('generated art frame mappings', () => {
     )).toEqual([0, 1, 2, 3, 4, 5]);
   });
 
-  it('uses authored X-ray evidence only for matching cases', () => {
-    expect(xrayFrameForCase('damaged-vial')).toBe(0);
-    expect(xrayFrameForCase('mimic')).toBe(1);
-    expect(xrayFrameForCase('live-egg')).toBe(2);
-    expect(xrayFrameForCase('lava-lamp')).toBe(3);
-    expect(xrayFrameForCase('tea-safe')).toBeNull();
+  it('maps every case to its own authored X-ray evidence frame', () => {
+    expect(xrayFrameForCase('damaged-vial')).toEqual({ texture: 'xray-evidence-v1', frame: 0 });
+    expect(xrayFrameForCase('boots-safe')).toEqual({ texture: 'xray-evidence-v2', frame: 1 });
+    expect(xrayFrameForCase('forged-label')).toEqual({ texture: 'xray-evidence-v3', frame: 3 });
+    expect(xrayFrameForCase('timepiece')).toEqual({ texture: 'xray-evidence-v4', frame: 1 });
+    expect(xrayFrameForCase('phoenix-feather')).toEqual({ texture: 'xray-evidence-v5', frame: 3 });
+
+    const mappedFrames = CASE_TEMPLATES.map(({ id }) => xrayFrameForCase(id));
+    expect(mappedFrames.every((frame) => frame !== null)).toBe(true);
+    expect(new Set(mappedFrames.map((frame) => `${frame!.texture}:${frame!.frame}`)).size).toBe(CASE_TEMPLATES.length);
+    expect(xrayFrameForCase('unknown-case')).toBeNull();
   });
 });
