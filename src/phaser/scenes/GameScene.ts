@@ -42,6 +42,10 @@ export class GameScene extends Phaser.Scene {
       this.parcel = new ParcelView(this, 640, 558, activeCase.style, activeCase.trackingCode);
     }
 
+    if (activeCase && snapshot.usedTools.includes('xray')) {
+      this.parcel?.showXray(activeCase.id);
+    }
+
     if (!activeCase && snapshot.phase !== 'resolving') {
       this.clearActors();
       this.activeCaseId = null;

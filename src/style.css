@@ -910,6 +910,8 @@ button:disabled {
 @media (max-aspect-ratio: 1/1) and (max-width: 760px) {
   #game-shell {
     --portrait-canvas-top: 4.4em;
+    --portrait-canvas-height: 81.5625vw;
+    --portrait-canvas-width: 145vw;
     width: 100vw;
     height: 100vh;
     height: 100dvh;
@@ -925,7 +927,7 @@ button:disabled {
     bottom: auto;
     left: 0;
     width: 100% !important;
-    height: 56.25vw !important;
+    height: var(--portrait-canvas-height) !important;
     overflow: hidden;
     border-top: 0.08em solid rgba(247, 212, 120, 0.2);
     border-bottom: 0.08em solid rgba(247, 212, 120, 0.3);
@@ -933,9 +935,13 @@ button:disabled {
   }
 
   #game-canvas canvas {
-    inset: 0;
-    width: 100% !important;
-    height: 100% !important;
+    top: 0;
+    right: auto;
+    bottom: auto;
+    left: 50%;
+    width: var(--portrait-canvas-width) !important;
+    height: var(--portrait-canvas-height) !important;
+    transform: translateX(-50%);
   }
 
   #game-ui {
@@ -977,7 +983,7 @@ button:disabled {
 
   .rules-board,
   .docket {
-    top: calc(var(--portrait-canvas-top) + 56.25vw + 1em);
+    top: calc(var(--portrait-canvas-top) + var(--portrait-canvas-height) + 1em);
     bottom: 16em;
     height: auto;
     min-height: 0;
@@ -1020,7 +1026,7 @@ button:disabled {
   .scan-line { grid-template-columns: 3.6em 1fr; gap: 0.35em; padding: 0.38em; font-size: 0.59em; }
 
   .customer-card {
-    top: calc(var(--portrait-canvas-top) + 56.25vw - 4.5em);
+    top: calc(var(--portrait-canvas-top) + var(--portrait-canvas-height) - 4.5em);
     bottom: auto;
     left: 0.8em;
     width: 20em;
